@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Código binário: Mosaico + Explicação</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Sora:wght@300;600&display=swap">
+<style>
+:root{color-scheme:dark;--text:#e9eefc;--ice:#9fd8ff;--amber:#ffb454;--dim:#1d2a4d;box-sizing:border-box}
+*{box-sizing:inherit}
+html,body{height:100%;margin:0;background:#000;color:var(--text);overflow:hidden;cursor:none;font-family:Sora,system-ui,sans-serif}
+.scr{position:fixed;inset:0;opacity:0;pointer-events:none;transition:opacity .9s}
+.scr.on{opacity:1}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#A{background:#170d33}
+#B{background:#0a0f1f}
+#cap{position:absolute;left:0;right:0;bottom:0;padding:0 5vw calc(4vh + env(safe-area-inset-bottom,0px));text-align:center;transition:opacity .6s}
+#cap.out{opacity:0}
+#t{font-size:clamp(1.3rem,3.6vw,2.8rem);font-weight:300;margin:0 0 1vh}
+#bin{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:clamp(.9rem,2.4vw,1.8rem);color:#ff5c8a;letter-spacing:.14em;min-height:1.4em;overflow-wrap:anywhere}
+#stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:5vmin;gap:3vmin;transition:opacity .8s}
+#stage.out{opacity:0}
+h1{font-weight:600;font-size:clamp(2.2rem,8vw,6.5rem);margin:0;letter-spacing:-.02em;line-height:1.05}
+h2{font-weight:300;font-size:clamp(1.2rem,3.4vw,2.6rem);margin:0;color:var(--ice);max-width:22ch}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.bits{font-size:clamp(2rem,9vw,7rem);letter-spacing:.08em}
+.one{color:var(--amber);text-shadow:0 0 .4em rgba(255,180,84,.55)}
+.zero{color:#5d7bb8}
+.lamps{display:flex;gap:2.2vmin}
+.lamp{width:min(8vw,90px);height:min(8vw,90px);border-radius:50%;border:2px solid var(--dim);background:#0d1630;transition:all .25s;display:grid;place-items:center;font-size:min(3.6vw,40px)}
+.lamp.on{background:var(--amber);border-color:var(--amber);color:#2a1700;box-shadow:0 0 5vmin rgba(255,180,84,.6)}
+.dec{font-size:clamp(1.4rem,4vw,3rem);color:var(--ice)}
+.row{display:flex;align-items:center;gap:4vmin;font-size:clamp(1.6rem,6vw,4.6rem)}
+.row .ch{color:var(--ice);font-weight:700;min-width:1.2ch}
+.w{display:flex;gap:3vmin}
+.w div{display:flex;flex-direction:column;gap:1.4vmin;align-items:center;min-width:9vmin;font-size:clamp(1.8rem,7vw,5rem)}
+.w small{font-size:.4em;color:var(--ice)}
+@media (prefers-reduced-motion:reduce){#stage,#cap,.scr{transition:none}}
+</style>
+</head>
+<body>
+<section class="scr" id="A"><canvas id="ca"></canvas><div id="cap"><p id="t"></p><div id="bin"></div></div></section>
+<section class="scr" id="B"><canvas id="cb"></canvas><main id="stage"></main></section>
+<script>
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+/* ========== PARTE 1: MOSAICO BINÁRIO ========== */
+const ca=$('ca'),xa=ca.getContext('2d');
+const words=[
+ {w:'BINÁRIO',t:'Só dois símbolos: 0 e 1'},
+ {w:'BIT',t:'Um bit é um único 0 ou 1',bin:1},
+ {w:'BYTE',t:'8 bits formam 1 byte',bin:1},
+ {w:'OLA',t:'Assim o computador escreve “OLA”',bin:1},
+ {w:'1+1',t:'Em binário, 1 + 1 = 10',x:'0001 + 0001 = 0010'},
+ {w:'42',t:'A resposta de tudo, em binário',x:'101010'}
+];
+const CW=15,CH=22,HOLD=6200;
+let cols,rows,tgt,cur,settle,W,H,gridTop,t0=0,wi=-1,off=document.createElement('canvas'),A={on:false,done:null};
+
+function layoutA(){
+  const d=devicePixelRatio||1;W=innerWidth;H=innerHeight;
+  ca.width=W*d;ca.height=H*d;xa.setTransform(d,0,0,d,0,0);
+  cols=Math.floor(W/CW);rows=Math.floor(H*.72/CH);gridTop=Math.floor(H*.04);
+  cur=new Uint8Array(cols*rows);settle=new Float32Array(cols*rows);tgt=new Uint8Array(cols*rows);
+  target(Math.max(wi,0));
+}
+function target(i){
+  const w=words[i].w,o=off.getContext('2d');
+  off.width=cols;off.height=rows;o.clearRect(0,0,cols,rows);
+  o.textAlign='center';o.textBaseline='middle';o.fillStyle='#fff';
+  let s=rows;o.font='800 '+s+'px "JetBrains Mono",monospace';
+  const m=o.measureText(w).width;
+  if(m>cols*.92){s=s*cols*.92/m;o.font='800 '+s+'px "JetBrains Mono",monospace'}
+  o.fillText(w,cols/2,rows/2+s*.04);
+  const px=o.getImageData(0,0,cols,rows).data;
+  for(let k=0;k<cols*rows;k++){tgt[k]=px[k*4+3]>110?1:0}
+}
+const bitsOf=s=>[...s].map(c=>c.charCodeAt(0).toString(2).padStart(8,'0')).join(' ');
+function nextA(now){
+  wi++;t0=now;target(wi);
+  for(let k=0;k<cols*rows;k++){settle[k]=reduce?0:((k%cols)/cols)*1400+Math.random()*500}
+  const cap=$('cap'),it=words[wi];
+  cap.classList.add('out');
+  setTimeout(()=>{$('t').textContent=it.t;$('bin').textContent=it.bin?bitsOf(it.w):(it.x||'');cap.classList.remove('out')},500);
+}
+function frameA(now){
+  if(!A.on)return;
+  if(wi<0||now-t0>HOLD){
+    if(wi===words.length-1){A.on=false;$('A').classList.remove('on');setTimeout(A.done,1000);return}
+    nextA(now);
+  }
+  const el=now-t0,x0=(W-cols*CW)/2;
+  xa.fillStyle='#170d33';xa.fillRect(0,0,W,H);
+  xa.font='400 '+CH*.8+'px "JetBrains Mono",monospace';xa.textBaseline='top';
+  for(let k=0;k<cols*rows;k++)cur[k]=el>=settle[k]?tgt[k]:(Math.random()>.5?1:0);
+  xa.fillStyle='#3a2a6b';
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const k=r*cols+c;if(!(el>=settle[k]&&tgt[k]))xa.fillText(cur[k],x0+c*CW,gridTop+r*CH)}
+  xa.fillStyle='#ff5c8a';xa.shadowColor='#ff5c8a';xa.shadowBlur=10;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const k=r*cols+c;if(el>=settle[k]&&tgt[k])xa.fillText('1',x0+c*CW,gridTop+r*CH)}
+  xa.shadowBlur=0;
+  setTimeout(()=>requestAnimationFrame(frameA),reduce?200:45);
+}
+function startA(done){
+  A.on=true;A.done=done;wi=-1;$('t').textContent='';$('bin').textContent='';
+  $('A').classList.add('on');layoutA();requestAnimationFrame(frameA);
+}
+
+/* ========== PARTE 2: CÓDIGO BINÁRIO ========== */
+const cb=$('cb'),xb=cb.getContext('2d'),st=$('stage');
+let fsz=20,bcols,drops,rainT,timers=[];
+function sizeB(){cb.width=innerWidth;cb.height=innerHeight;bcols=Math.ceil(cb.width/fsz);drops=Array.from({length:bcols},()=>Math.random()*-40);xb.fillStyle='#0a0f1f';xb.fillRect(0,0,cb.width,cb.height)}
+function rain(){
+  xb.fillStyle='rgba(10,15,31,.14)';xb.fillRect(0,0,cb.width,cb.height);
+  xb.font=fsz+'px "JetBrains Mono",monospace';
+  for(let i=0;i<bcols;i++){
+    const v=Math.random()>.5?'1':'0';
+    xb.fillStyle=v==='1'?'rgba(255,180,84,.35)':'rgba(93,123,184,.4)';
+    xb.fillText(v,i*fsz,drops[i]*fsz);
+    if(drops[i]*fsz>cb.height&&Math.random()>.975)drops[i]=0;
+    drops[i]+=.5;
+  }
+}
+const colorBits=s=>[...s].map(x=>`<span class="${x==='1'?'one':'zero'}">${x}</span>`).join('');
+const pad8=n=>n.toString(2).padStart(8,'0');
+const every=(f,ms)=>timers.push(setInterval(f,ms));
+const later=(f,ms)=>timers.push(setTimeout(f,ms));
+const clearT=()=>{timers.forEach(t=>{clearInterval(t);clearTimeout(t)});timers=[]};
+
+const scenes=[
+ {d:6000,run(){st.innerHTML=`<h1>Código binário</h1><h2>A língua que todo computador entende</h2>`}},
+ {d:8000,run(){
+   st.innerHTML=`<h2>Tudo é feito de 0 e 1</h2><div class="lamps">${'<div class="lamp mono"></div>'.repeat(8)}</div><div class="dec">0 é desligado. 1 é ligado.</div>`;
+   const L=[...st.querySelectorAll('.lamp')];
+   const tick=()=>L.forEach(l=>{const on=Math.random()>.5;l.classList.toggle('on',on);l.textContent=on?'1':'0'});
+   tick();every(tick,700);}},
+ {d:9000,run(){
+   st.innerHTML=`<h2>Contando em binário</h2><div class="bits mono" id="n"></div><div class="dec mono" id="dd"></div>`;
+   let i=0;const f=()=>{$('n').innerHTML=colorBits(i.toString(2).padStart(4,'0'));$('dd').textContent='= '+i;i=(i+1)%16};
+   f();every(f,520);}},
+ {d:10000,run(){
+   st.innerHTML=`<h2>Cada letra vira um número</h2><div id="rr" style="display:flex;flex-direction:column;gap:2vmin"></div>`;
+   const w='BOM';[...w].forEach(ch=>$('rr').insertAdjacentHTML('beforeend',`<div class="row mono"><span class="ch">${ch}</span><span class="bt"></span></div>`));
+   const bt=[...$('rr').querySelectorAll('.bt')];let k=0;
+   every(()=>{if(k>12)return;bt.forEach((el,i)=>{el.innerHTML=colorBits(pad8(w.charCodeAt(i)).slice(0,Math.min(8,k)))});k++},180);}},
+ {d:9000,run(){
+   st.innerHTML=`<h2>Como ler 1011</h2><div class="w mono"><div><small>8</small><span class="one">1</span></div><div><small>4</small><span class="zero">0</span></div><div><small>2</small><span class="one">1</span></div><div><small>1</small><span class="one">1</span></div></div><div class="dec mono" id="ss"></div>`;
+   const t=['8','8 + 0','8 + 0 + 2','8 + 0 + 2 + 1 = 11'];let i=0;
+   const f=()=>{$('ss').textContent=t[Math.min(i,3)];i++};f();every(f,1400);}},
+ {d:6000,run(){st.innerHTML=`<div class="bits mono">${colorBits('01000010')}</div><h2>Agora você sabe ler binário</h2>`}}
+];
+let idx=0;
+function playB(done){
+  clearT();
+  const sc=scenes[idx];st.classList.remove('out');sc.run();
+  later(()=>st.classList.add('out'),sc.d-800);
+  later(()=>{idx++;if(idx>=scenes.length){endB(done)}else playB(done)},sc.d);
+}
+function endB(done){clearT();clearInterval(rainT);$('B').classList.remove('on');setTimeout(done,1000)}
+function startB(done){
+  idx=0;sizeB();$('B').classList.add('on');
+  rainT=setInterval(rain,60);playB(done);
+}
+
+/* ========== SEQUÊNCIA: Mosaico → Código binário → repete ========== */
+function loop(){startA(()=>startB(loop))}
+addEventListener('resize',()=>{if(A.on)layoutA();if($('B').classList.contains('on'))sizeB()});
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(loop);
+function fsw(){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen?.()}
+addEventListener('keydown',e=>{if(e.key==='f'||e.key==='F')fsw()});
+addEventListener('dblclick',fsw);
+</script>
+</body>
+</html>
